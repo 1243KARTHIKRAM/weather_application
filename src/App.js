@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 
 function App() {
     const [city, setCity] = useState("");
-  const [weather, setWeather] = useState(null);
+    const [weather, setWeather] = useState(null);
     const [history, setHistory] = useState(() => {
       try {
         const raw = localStorage.getItem("weatherHistory");
@@ -12,30 +12,48 @@ function App() {
         return [];
       }
     });
+    const [error, setError] = useState("");
+    const [loading, setLoading] = useState(false);
+
 
   const getWeather = async () => {
     if (!city) return;
+    setError("");
+    setLoading(true);
 
     const apiKey = "b6aa2be33b7d48373064b49377f59ce2"; // replace with your key
     const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=${apiKey}`;
 
-    const res = await fetch(url);
-    const data = await res.json();
-    console.log(data);
-    setWeather(data);
-    if (data && data.main && data.name) {
-      const entry = {
-        id: Date.now(),
-        name: data.name,
-        temp: data.main.temp,
-        condition: data.weather && data.weather[0] ? data.weather[0].main : "",
-        time: new Date().toLocaleString(),
-      };
-      setHistory((prev) => {
-        const next = [entry, ...prev].slice(0, 10); // keep last 10
-        try { localStorage.setItem("weatherHistory", JSON.stringify(next)); } catch (e) {}
-        return next;
-      });
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || 'Unable to fetch');
+      }
+      const data = await res.json();
+      console.log(data);
+      setWeather(data);
+
+      if (data && data.main && data.name) {
+        const entry = {
+          id: Date.now(),
+          name: data.name,
+          temp: data.main.temp,
+          condition: data.weather && data.weather[0] ? data.weather[0].main : "",
+          time: new Date().toLocaleString(),
+        };
+        setHistory((prev) => {
+          const next = [entry, ...prev].slice(0, 10); // keep last 10
+          try { localStorage.setItem("weatherHistory", JSON.stringify(next)); } catch (e) {}
+          return next;
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Network error");
+      setWeather(null);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -63,15 +81,29 @@ function App() {
           <br/>
 
           <button onClick={getWeather}>Get Weather</button>
+          {loading && <div className="loading"><div className="spinner"></div></div>}
+          {error && <div className="error">{error}</div>}
 
           {weather && weather.main && (
             <div className="weather">
-              <h3>{weather.name}</h3>
+              <h3>{weather.name}, {weather.sys && weather.sys.country}</h3>
               <p>Temperature: {weather.main.temp} °C</p>
-              <p>Condition: {weather.weather[0].main}</p>
+              <p>Description: {weather.weather[0].description}</p>
+              {weather.weather[0].icon && (
+                <img
+                  src={`https://openweathermap.org/img/wn/${weather.weather[0].icon}@2x.png`}
+                  alt={weather.weather[0].description}
+                />
+              )}
+              <p>Humidity: {weather.main.humidity}%</p>
+              <p>Wind speed: {weather.wind && weather.wind.speed} m/s</p>
+              <p>
+                Local time:{' '}
+                {new Date((weather.dt + (weather.timezone || 0)) * 1000).toLocaleString()}
+              </p>
             </div>
-          )
-          }
+          )}
+
           {history && history.length > 0 && (
             <div className="history">
               <h4>History (past searches)</h4>
